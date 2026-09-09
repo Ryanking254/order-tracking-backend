@@ -10,8 +10,23 @@ CREATE TABLE users (
   password VARCHAR(255) NOT NULL,
   role ENUM('customer', 'driver', 'admin') NOT NULL DEFAULT 'customer',
   email VARCHAR(100),
+  shop_id INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (shop_id) REFERENCES shops(id)
+);
+
+-- Shops table (one row per onboarded shop/company; admin role = shop owner)
+CREATE TABLE shops (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  owner_id INT NOT NULL,
+  name VARCHAR(150) NOT NULL,
+  image_url LONGTEXT,
+  address VARCHAR(255),
+  invite_code VARCHAR(12) NOT NULL UNIQUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (owner_id) REFERENCES users(id)
 );
 
 -- Deliveries table (one car, multiple orders per delivery)
@@ -30,6 +45,7 @@ CREATE TABLE deliveries (
 CREATE TABLE orders (
   id INT PRIMARY KEY AUTO_INCREMENT,
   customer_id INT NOT NULL,
+  shop_id INT,
   delivery_id INT,
   order_number VARCHAR(50) NOT NULL UNIQUE,
   quantity INT NOT NULL,
@@ -43,6 +59,7 @@ CREATE TABLE orders (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (customer_id) REFERENCES users(id),
+  FOREIGN KEY (shop_id) REFERENCES shops(id),
   FOREIGN KEY (delivery_id) REFERENCES deliveries(id)
 );
 
@@ -76,7 +93,9 @@ CREATE TABLE notifications (
 
 -- Create indexes for faster queries
 CREATE INDEX idx_user_role ON users(role);
+CREATE INDEX idx_user_shop ON users(shop_id);
 CREATE INDEX idx_order_customer ON orders(customer_id);
 CREATE INDEX idx_order_status ON orders(status);
+CREATE INDEX idx_order_shop ON orders(shop_id);
 CREATE INDEX idx_delivery_driver ON deliveries(driver_id);
 CREATE INDEX idx_delivery_status ON deliveries(status);

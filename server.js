@@ -12,6 +12,7 @@ import driverRoutes from './routes/drivers.js';
 import trackingRoutes from './routes/tracking.js';
 import paymentRoutes from './routes/payments.js';
 import adminRoutes from './routes/admin.js';
+import shopRoutes from './routes/shops.js';
 
 // Import middleware
 import { verifyToken } from './middleware/auth.js';
@@ -29,8 +30,9 @@ const io = new Server(server, {
 
 // Middleware
 app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+// 10mb: shop photos are uploaded as base64 data-URLs in JSON
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -39,6 +41,7 @@ app.use('/api/deliveries', driverRoutes);
 app.use('/api/tracking', trackingRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/shops', shopRoutes);
 
 // Root route (avoids 404 when opening the backend URL in a browser)
 app.get('/', (req, res) => {

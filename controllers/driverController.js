@@ -123,3 +123,72 @@ export const getActiveDeliveries = async (req, res) => {
     res.status(500).json({ message: 'Error fetching active deliveries' });
   }
 };
+
+// GET /api/deliveries/shop-queue — pending, unassigned orders from the driver's shop
+export const getShopQueue = async (req, res) => {
+  try {
+    const [me] = await pool.query('SELECT shop_id FROM users WHERE id = ?', [req.user.id]);
+    const shopId = me[0]?.shop_id;
+    if (!shopId) {
+      return res.status(400).json({ message: 'Join a shop first with your invite code' });
+    }
+    const [orders] = await pool.query(
+      `SELECT o.*, u.name as customer_name, u.phone as customer_phone, s.name as shop_name
+       FROM orders o
+       JOIN users u ON o.customer_id = u.id
+       LEFT JOIN shops s ON o.shop_id = s.id
+       WHERE o.shop_id = ? AND o.status = 'pending' AND o.delivery_id IS NULL
+       ORDER BY o.created_at ASC`,
+      [shopId]
+    );
+    res.json({ orders });
+  } catch (error) {
+    console.error('Get shop queue error:', error);
+    res.status(500).json({ message: 'Error fetching shop queue' });
+  }
+};
+
+// POST /api/deliveries/claim — driver takes an order from their shop's queue
+export const claimOrder = async (req, res) => {
+  try {
+    const driverId = req.user.id;
+    const { order_id } = req.body;
+    if (!order_id) {
+      return res.status(400).json({ message: 'order_id required' });
+    }
+
+    const [me] = await pool.query('SELECT shop_id FROM users WHERE id = ?', [driverId]);
+    const shopId = me[0]?.shop_id;
+    if (!shopId) {
+      return res.status(400).json({ message: 'Join a shop first with your invite code' });
+    }
+
+    const [orders] = await pool.query('SELECT * FROM orders WHERE id = ?', [order_id]);
+    if (orders.length === 0) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    const order = orders[0];
+    if (order.status !== 'pending' || order.delivery_id) {
+      return res.status(409).json({ message: 'Order already taken' });
+    }
+    if (order.shop_id !== shopId) {
+      return res.status(403).json({ message: 'Order belongs to another shop' });
+    }
+
+    const [deliveryResult] = await pool.query(
+      'INSERT INTO deliveries (driver_id, status, started_at) VALUES (?, ?, NOW())',
+      [driverId, 'in_progress']
+    );
+    const deliveryId = deliveryResult.insertId;
+    await pool.query('UPDATE orders SET delivery_id = ?, status = ? WHERE id = ?', [deliveryId, 'assigned', order_id]);
+
+    res.status(201).json({
+      message: 'Order claimed',
+      delivery: { id: deliveryId, driver_id: driverId, status: 'in_progress' },
+      order: { id: order_id, status: 'assigned', delivery_id: deliveryId },
+    });
+  } catch (error) {
+    console.error('Claim order error:', error);
+    res.status(500).json({ message: 'Error claiming order' });
+  }
+};

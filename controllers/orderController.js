@@ -3,11 +3,25 @@ import { sendOrderStatusEmail, sendPaymentConfirmationEmail } from '../services/
 
 export const createOrder = async (req, res) => {
   try {
-    const { quantity, delivery_address, notes, price_per_unit, payment_method } = req.body;
+    const { quantity, delivery_address, notes, price_per_unit, payment_method, shop_id } = req.body;
     const customerId = req.user.id;
 
     if (!quantity || !delivery_address || !price_per_unit) {
       return res.status(400).json({ message: 'Quantity, address, and price required' });
+    }
+
+    // Shop is required: prefer explicit shop_id, fall back to customer's chosen shop
+    let orderShopId = shop_id || null;
+    if (!orderShopId) {
+      const [me] = await pool.query('SELECT shop_id FROM users WHERE id = ?', [customerId]);
+      orderShopId = me[0]?.shop_id || null;
+    }
+    if (!orderShopId) {
+      return res.status(400).json({ message: 'Choose a shop first' });
+    }
+    const [shopRows] = await pool.query('SELECT id FROM shops WHERE id = ?', [orderShopId]);
+    if (shopRows.length === 0) {
+      return res.status(400).json({ message: 'Shop not found' });
     }
 
     // Generate order number
@@ -20,8 +34,8 @@ export const createOrder = async (req, res) => {
     const customerName = users[0]?.name || 'Valued Customer';
 
     const [result] = await pool.query(
-      'INSERT INTO orders (customer_id, order_number, quantity, delivery_address, notes, price_per_unit, total_price, payment_method, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [customerId, orderNumber, quantity, delivery_address, notes || '', price_per_unit, totalPrice, payment_method || 'on_delivery', 'pending']
+      'INSERT INTO orders (customer_id, shop_id, order_number, quantity, delivery_address, notes, price_per_unit, total_price, payment_method, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [customerId, orderShopId, orderNumber, quantity, delivery_address, notes || '', price_per_unit, totalPrice, payment_method || 'on_delivery', 'pending']
     );
 
     // Send confirmation email if email exists
@@ -47,6 +61,7 @@ export const createOrder = async (req, res) => {
         total_price: totalPrice,
         payment_method: payment_method || 'on_delivery',
         payment_status: 'pending',
+        shop_id: orderShopId,
       },
     });
   } catch (error) {
@@ -60,7 +75,9 @@ export const getCustomerOrders = async (req, res) => {
     const customerId = req.user.id;
 
     const [orders] = await pool.query(
-      'SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC',
+      `SELECT o.*, s.name AS shop_name, s.image_url AS shop_image FROM orders o
+       LEFT JOIN shops s ON o.shop_id = s.id
+       WHERE o.customer_id = ? ORDER BY o.created_at DESC`,
       [customerId]
     );
 
@@ -76,7 +93,9 @@ export const getOrderById = async (req, res) => {
     const { orderId } = req.params;
 
     const [orders] = await pool.query(
-      'SELECT o.*, d.driver_id, u.name as driver_name FROM orders o LEFT JOIN deliveries d ON o.delivery_id = d.id LEFT JOIN users u ON d.driver_id = u.id WHERE o.id = ?',
+      `SELECT o.*, d.driver_id, u.name as driver_name, s.name as shop_name, s.image_url as shop_image
+       FROM orders o LEFT JOIN deliveries d ON o.delivery_id = d.id LEFT JOIN users u ON d.driver_id = u.id
+       LEFT JOIN shops s ON o.shop_id = s.id WHERE o.id = ?`,
       [orderId]
     );
 

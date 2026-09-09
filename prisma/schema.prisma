@@ -1,0 +1,160 @@
+// Prisma schema for the water order tracking system.
+// Mirrors backend-server/schema.sql. TiDB Cloud speaks the MySQL protocol,
+// so the mysql provider works against it (DATABASE_URL must include TLS,
+// e.g. ?sslmode=require — see config/db.js).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum Role {
+  customer
+  driver
+  admin
+}
+
+enum OrderStatus {
+  pending
+  assigned
+  picked_up
+  in_transit
+  delivered
+  cancelled
+}
+
+enum DeliveryStatus {
+  pending
+  in_progress
+  completed
+  cancelled
+}
+
+enum PaymentMethod {
+  on_delivery
+  on_app
+}
+
+enum PaymentStatus {
+  pending
+  completed
+  failed
+}
+
+model User {
+  id            Int            @id @default(autoincrement())
+  name          String         @db.VarChar(100)
+  phone         String         @unique @db.VarChar(15)
+  password      String         @db.VarChar(255)
+  role          Role           @default(customer)
+  email         String?        @db.VarChar(100)
+  shop_id       Int?
+  shop          Shop?          @relation("ShopMembers", fields: [shop_id], references: [id])
+  ownedShops    Shop[]         @relation("ShopOwners")
+  created_at    DateTime       @default(now()) @db.Timestamp(0)
+  updated_at    DateTime       @updatedAt @db.Timestamp(0)
+  orders        Order[]        @relation("CustomerOrders")
+  deliveries    Delivery[]     @relation("DriverDeliveries")
+  gpsLogs       GpsLog[]
+  notifications Notification[]
+
+  @@index([role])
+  @@index([shop_id])
+  @@map("users")
+}
+
+model Shop {
+  id          Int      @id @default(autoincrement())
+  owner_id    Int
+  owner       User     @relation("ShopOwners", fields: [owner_id], references: [id])
+  name        String   @db.VarChar(150)
+  image_url   String?  @db.LongText
+  address     String?  @db.VarChar(255)
+  invite_code String   @unique @db.VarChar(12)
+  created_at  DateTime @default(now()) @db.Timestamp(0)
+  updated_at  DateTime @updatedAt @db.Timestamp(0)
+  members     User[]   @relation("ShopMembers")
+  orders      Order[]  @relation("ShopOrders")
+
+  @@index([owner_id])
+  @@index([invite_code])
+  @@map("shops")
+}
+
+model Delivery {
+  id           Int            @id @default(autoincrement())
+  driver_id    Int
+  driver       User           @relation("DriverDeliveries", fields: [driver_id], references: [id])
+  status       DeliveryStatus @default(pending)
+  started_at   DateTime?      @db.Timestamp(0)
+  completed_at DateTime?      @db.Timestamp(0)
+  created_at   DateTime       @default(now()) @db.Timestamp(0)
+  updated_at   DateTime       @updatedAt @db.Timestamp(0)
+  orders       Order[]
+  gpsLogs      GpsLog[]
+
+  @@index([driver_id])
+  @@index([status])
+  @@map("deliveries")
+}
+
+model Order {
+  id               Int           @id @default(autoincrement())
+  customer_id      Int
+  customer         User          @relation("CustomerOrders", fields: [customer_id], references: [id])
+  shop_id          Int?
+  shop             Shop?         @relation("ShopOrders", fields: [shop_id], references: [id])
+  delivery_id      Int?
+  delivery         Delivery?     @relation(fields: [delivery_id], references: [id])
+  order_number     String        @unique @db.VarChar(50)
+  quantity         Int
+  status           OrderStatus   @default(pending)
+  delivery_address String        @db.VarChar(255)
+  notes            String?       @db.Text
+  price_per_unit   Decimal?      @db.Decimal(10, 2)
+  total_price      Decimal?      @db.Decimal(10, 2)
+  payment_method   PaymentMethod @default(on_delivery)
+  payment_status   PaymentStatus @default(pending)
+  created_at       DateTime      @default(now()) @db.Timestamp(0)
+  updated_at       DateTime      @updatedAt @db.Timestamp(0)
+  notifications    Notification[]
+
+  @@index([customer_id])
+  @@index([status])
+  @@index([shop_id])
+  @@map("orders")
+}
+
+model GpsLog {
+  id          Int      @id @default(autoincrement())
+  delivery_id Int
+  delivery    Delivery @relation(fields: [delivery_id], references: [id])
+  driver_id   Int
+  driver      User     @relation(fields: [driver_id], references: [id])
+  latitude    Decimal  @db.Decimal(10, 8)
+  longitude   Decimal  @db.Decimal(11, 8)
+  accuracy    Int?
+  created_at  DateTime @default(now()) @db.Timestamp(0)
+
+  @@index([delivery_id])
+  @@index([created_at])
+  @@map("gps_logs")
+}
+
+model Notification {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  user       User     @relation(fields: [user_id], references: [id])
+  order_id   Int?
+  order      Order?   @relation(fields: [order_id], references: [id])
+  type       String?  @db.VarChar(50)
+  message    String?  @db.Text
+  isRead     Boolean  @default(false) @map("read")
+  created_at DateTime @default(now()) @db.Timestamp(0)
+
+  @@map("notifications")
+}

@@ -5,6 +5,7 @@ import {
   getActiveDeliveries,
   createDelivery,
   getDashboardStats,
+  getDrivers,
 } from '../controllers/adminController.js';
 
 const router = express.Router();
@@ -23,5 +24,8 @@ router.post('/deliveries', createDelivery);
 
 // Get dashboard statistics
 router.get('/dashboard/stats', getDashboardStats);
+
+// Get all drivers (for delivery assignment)
+router.get('/drivers', getDrivers);
 
 export default router;
