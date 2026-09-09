@@ -30,7 +30,8 @@ export const listShops = async (req, res) => {
   }
 };
 
-// POST /api/shops — admin (shop owner) creates their shop
+// POST /api/shops — admin (shop owner) creates a shop.
+// Owners may own multiple shops; the newly created shop becomes their active one.
 export const createShop = async (req, res) => {
   try {
     const ownerId = req.user.id;
@@ -40,18 +41,13 @@ export const createShop = async (req, res) => {
       return res.status(400).json({ message: 'Shop name required' });
     }
 
-    const [existing] = await pool.query('SELECT id FROM shops WHERE owner_id = ?', [ownerId]);
-    if (existing.length > 0) {
-      return res.status(400).json({ message: 'You already have a shop', shop_id: existing[0].id });
-    }
-
     const invite_code = await generateInviteCode();
     const [result] = await pool.query(
       'INSERT INTO shops (owner_id, name, image_url, address, invite_code) VALUES (?, ?, ?, ?, ?)',
       [ownerId, name.trim(), image_url || null, address || null, invite_code]
     );
 
-    // Owner belongs to their own shop
+    // New shop becomes the owner's active shop
     await pool.query('UPDATE users SET shop_id = ? WHERE id = ?', [result.insertId, ownerId]);
 
     const [shops] = await pool.query('SELECT * FROM shops WHERE id = ?', [result.insertId]);
@@ -62,36 +58,40 @@ export const createShop = async (req, res) => {
   }
 };
 
-// GET /api/shops/my-shop — admin's own shop + drivers
-export const getMyShop = async (req, res) => {
+// GET /api/shops/my-shops — all shops owned by this admin, each with its drivers
+export const getMyShops = async (req, res) => {
   try {
-    const [shops] = await pool.query('SELECT * FROM shops WHERE owner_id = ?', [req.user.id]);
-    if (shops.length === 0) {
-      return res.status(404).json({ message: 'No shop yet' });
+    const [shops] = await pool.query('SELECT * FROM shops WHERE owner_id = ? ORDER BY created_at ASC', [req.user.id]);
+    for (const shop of shops) {
+      const [drivers] = await pool.query(
+        `SELECT id, name, phone, email, created_at FROM users
+         WHERE shop_id = ? AND role = 'driver' ORDER BY name`,
+        [shop.id]
+      );
+      shop.drivers = drivers;
     }
-    const shop = shops[0];
-    const [drivers] = await pool.query(
-      `SELECT id, name, phone, email, created_at FROM users
-       WHERE shop_id = ? AND role = 'driver' ORDER BY name`,
-      [shop.id]
-    );
-    res.json({ shop, drivers });
+    res.json({ shops });
   } catch (error) {
-    console.error('Get my shop error:', error);
-    res.status(500).json({ message: 'Error fetching shop' });
+    console.error('Get my shops error:', error);
+    res.status(500).json({ message: 'Error fetching shops' });
   }
 };
 
-// POST /api/shops/regenerate-code — admin rotates the driver invite code
+// POST /api/shops/regenerate-code — admin rotates a shop's driver invite code
 export const regenerateCode = async (req, res) => {
   try {
+    const { shop_id } = req.body;
     const [shops] = await pool.query('SELECT id FROM shops WHERE owner_id = ?', [req.user.id]);
     if (shops.length === 0) {
       return res.status(404).json({ message: 'No shop yet' });
     }
+    const target = shop_id ? shops.find((s) => s.id === Number(shop_id)) : shops[0];
+    if (!target) {
+      return res.status(403).json({ message: 'Shop is not yours' });
+    }
     const invite_code = await generateInviteCode();
-    await pool.query('UPDATE shops SET invite_code = ? WHERE id = ?', [invite_code, shops[0].id]);
-    res.json({ message: 'Invite code regenerated', invite_code });
+    await pool.query('UPDATE shops SET invite_code = ? WHERE id = ?', [invite_code, target.id]);
+    res.json({ message: 'Invite code regenerated', shop_id: target.id, invite_code });
   } catch (error) {
     console.error('Regenerate code error:', error);
     res.status(500).json({ message: 'Error regenerating code' });

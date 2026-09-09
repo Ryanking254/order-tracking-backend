@@ -3,6 +3,8 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const COMPANY = process.env.COMPANY_NAME || 'Order Tracking';
+
 // Configure your email service
 // Using Gmail or your email provider
 const transporter = nodemailer.createTransport({
@@ -27,7 +29,7 @@ export const sendOrderStatusEmail = async (customerEmail, orderData) => {
     };
 
     const mailOptions = {
-      from: process.env.EMAIL_FROM || 'noreply@watercompany.com',
+      from: process.env.EMAIL_FROM || 'noreply@ordertracking.com',
       to: customerEmail,
       subject: `Order Update: ${orderData.order_number}`,
       html: `
@@ -42,7 +44,7 @@ export const sendOrderStatusEmail = async (customerEmail, orderData) => {
           <p><strong>Total Price:</strong> KES ${orderData.total_price}</p>
         </div>
         <p>Track your order in real-time on our app.</p>
-        <p>Best regards,<br/>Water Company Team</p>
+        <p>Best regards,<br/>${COMPANY} Team</p>
       `,
     };
 
@@ -56,7 +58,7 @@ export const sendOrderStatusEmail = async (customerEmail, orderData) => {
 export const sendPaymentConfirmationEmail = async (customerEmail, orderData) => {
   try {
     const mailOptions = {
-      from: process.env.EMAIL_FROM || 'noreply@watercompany.com',
+      from: process.env.EMAIL_FROM || 'noreply@ordertracking.com',
       to: customerEmail,
       subject: `Payment Received - ${orderData.order_number}`,
       html: `
@@ -70,7 +72,7 @@ export const sendPaymentConfirmationEmail = async (customerEmail, orderData) => 
           <p><strong>Payment Status:</strong> COMPLETED</p>
         </div>
         <p>Your order is confirmed and will be delivered soon.</p>
-        <p>Best regards,<br/>Water Company Team</p>
+        <p>Best regards,<br/>${COMPANY} Team</p>
       `,
     };
 
@@ -84,9 +86,9 @@ export const sendPaymentConfirmationEmail = async (customerEmail, orderData) => 
 export const sendDeliveryNotificationEmail = async (customerEmail, orderData, driverInfo) => {
   try {
     const mailOptions = {
-      from: process.env.EMAIL_FROM || 'noreply@watercompany.com',
+      from: process.env.EMAIL_FROM || 'noreply@ordertracking.com',
       to: customerEmail,
-      subject: `Your Water Order is On the Way - ${orderData.order_number}`,
+      subject: `Your Order is On the Way - ${orderData.order_number}`,
       html: `
         <h2>Delivery In Progress</h2>
         <p>Hi ${orderData.customer_name},</p>
@@ -99,7 +101,7 @@ export const sendDeliveryNotificationEmail = async (customerEmail, orderData, dr
           <p><strong>Estimated Delivery:</strong> Within the next hour</p>
         </div>
         <p>You can track your delivery in real-time on our app.</p>
-        <p>Best regards,<br/>Water Company Team</p>
+        <p>Best regards,<br/>${COMPANY} Team</p>
       `,
     };
 
